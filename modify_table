@@ -1,0 +1,6 @@
+alter table T_AMS_Stores add CustomerChannelID int not null default 77;
+alter table T_SAMS_Stores add CustomerChannelID int not null default 77;
+alter table T_AMS_MonthRentApportion add Type int;
+alter table T_SAMS_MonthRentApportion add Type int;
+alter table T_AMS_SpecialRooms  add IsPointShop int default 0;
+alter table T_SAMS_SpecialRooms  add IsPointShop int default 0;
