@@ -1,0 +1,257 @@
+ALTER PROCEDURE [dbo].[ProcDailyRooms]
+AS
+BEGIN
+
+-------------------------------------------确认合同收入--------------------------------------------------------------------------------
+insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+select   bic.年月日 as 日期,dra.ContractID as 合同编码,c.RenterID as 租客编码,vss.门店编码,vss.床号, 
+        case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+	             when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+		                  when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+				               when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+					               r.Status as 房间状态,'确认合同' as 类型,'31' as 科目编码,
+						               '周期性费用' as 科目类型,'租金' as 科目名称,1 as 数量,dra.Amount as 单价,dra.Amount as 金额
+							       from BI_UTIL_CALENDAR bic
+							       left join T_AMS_Rooms r
+							       on 1=1
+							       left join T_AMS_DailyRentApportion dra
+							       on bic.年月日=dra.Date and r.ID=dra.RoomID
+							       left join T_AMS_Contracts c
+							       on dra.ContractID=c.ID
+							       left join dbo.V_AMS_StoresStructure vss
+							       on r.ID=vss.房间编码
+							       where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)
+
+							       -------------------------------------------合同收入-周期性费用-------------------------------------------------------------------------------
+							       insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+							       select   bic.年月日 as 日期,sc.ContractID as 合同编码,c.RenterID as 租客编码,vss.门店编码,vss.床号, 
+							               case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+								                    when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+										                 when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+												              when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+													              r.Status as 房间状态,'合同' as 类型,sc.FeeType as 科目编码,
+														              '周期性费用' as 科目类型,cat.Name as 科目名称,sc.no as 数量,sc.dj as 单价,sc.Amount as 金额
+															      from BI_UTIL_CALENDAR bic
+															      left join T_AMS_Rooms r
+															      on 1=1
+															      left join (select CONVERT(varchar(10),pm.Date,120) as Date,sc.StoreID,sc.ContractID,sc.RoomID ,sc.FeeType,sc.no,case when sc.no=0 then 0 else sc.Amount/sc.no end as dj,sc.Amount,pm.ID
+															      from T_AMS_PaymentMethods pm
+															      left join (
+															      select r.StoreID,pc.ContractID,r.ID as RoomID,pc.Status,pc.PaymentMethodID,pc.FeeType,DATEDIFF(m,pc.StartDate,pc.EndDate) as no,pc.Amount from T_AMS_PeriodicCharges pc left join T_AMS_Contracts c on pc.ContractID=c.ID left join T_AMS_Rooms r  on c.RoomID=r.ID
+															      ) sc
+															      on pm.ID=sc.PaymentMethodID 
+															      where sc.Status=1 and pm.Status=2 and pm.TotalAmount!=0 --and pm.ID='176468'
+															      ) sc
+															      on bic.年月日=sc.Date and r.ID=sc.RoomID
+															      left join T_AMS_Contracts c
+															      on sc.ContractID=c.ID
+															      left join dbo.V_AMS_StoresStructure vss
+															      on r.ID=vss.房间编码
+															      left join T_AMS_ChargeAccountTypes cat
+															      on sc.FeeType=cat.FeeType
+															      where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+															      -------------------------------------------合同收入-一次性费用-------------------------------------------------------------------------------
+															      insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+															      select   bic.年月日 as 日期,sc.ContractID as 合同编码,c.RenterID as 租客编码,vss.门店编码,vss.床号, 
+															              case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+																                   when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+																		                when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+																				             when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+																					             r.Status as 房间状态,'合同' as 类型,sc.FeeType as 科目编码,
+																						             '一次性费用' as 科目类型,cat.Name as 科目名称,sc.no as 数量,sc.dj as 单价,sc.Amount as 金额
+																							     from BI_UTIL_CALENDAR bic
+																							     left join T_AMS_Rooms r
+																							     on 1=1
+																							     left join (select CONVERT(varchar(10),pm.Date,120) as Date,sc.StoreID,sc.ContractID,sc.RoomID ,sc.FeeType,sc.no,case when sc.no=0 then 0 else sc.Amount/sc.no end as dj,sc.Amount,pm.ID
+																							     from T_AMS_PaymentMethods pm
+																							     left join (
+																							     select r.StoreID,cs.contractid,r.id as RoomID,cs.Status,cs.paymentmethodid,isnull(cds.Type,15) as FeeType,cds.quantity as no,cds.Unitprice as amount from T_AMS_Charges cs left join T_AMS_ChargeDetails cds on cs.ID=cds.ChargeID left join T_AMS_Contracts c on cs.ContractID=c.ID left join T_AMS_Rooms r on c.RoomID=r.ID
+																							     ) sc
+																							     on pm.ID=sc.PaymentMethodID 
+																							     where sc.Status=1 and pm.Status=2 and pm.TotalAmount!=0 --and pm.ID='176468'
+																							     ) sc
+																							     on bic.年月日=sc.Date and r.ID=sc.RoomID
+																							     left join T_AMS_Contracts c
+																							     on sc.ContractID=c.ID
+																							     left join dbo.V_AMS_StoresStructure vss
+																							     on r.ID=vss.房间编码
+																							     left join T_AMS_ChargeAccountTypes cat
+																							     on sc.FeeType=cat.FeeType
+																							     where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+																							     -------------------------------------------合同收入-预定费用-------------------------------------------------------------------------------
+																							     insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+																							     select   bic.年月日 as 日期,sc.ContractID as 合同编码,c.RenterID as 租客编码,vss.门店编码,vss.床号, 
+																							             case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+																								                  when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+																										               when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+																											                    when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+																													            r.Status as 房间状态,'合同' as 类型,sc.FeeType as 科目编码,
+																														            '预定费用' as 科目类型,cat.Name as 科目名称,sc.no as 数量,sc.dj as 单价,sc.Amount as 金额
+																															    from BI_UTIL_CALENDAR bic
+																															    left join T_AMS_Rooms r
+																															    on 1=1
+																															    left join (select CONVERT(varchar(10),pm.Date,120) as Date,sc.StoreID,sc.ContractID,sc.RoomID ,sc.FeeType,sc.no,case when sc.no=0 then 0 else sc.Amount/sc.no end as dj,sc.Amount,pm.ID
+																															    from T_AMS_PaymentMethods pm
+																															    left join (
+																															    select r.StoreID,rc.contractid,r.id as RoomID,rc.Status,rc.paymentmethodid,'12' as FeeType,1 as no,rc.Amount from T_AMS_ReservationCharges rc left join T_AMS_Reservations rs on rc.reservationid=rs.ID left join T_AMS_Contracts c on rc.ContractID=c.ID left join T_AMS_Rooms r on rs.RoomID=r.ID
+																															    ) sc
+																															    on pm.ID=sc.PaymentMethodID 
+																															    where sc.Status=1 and pm.Status=2 and pm.TotalAmount!=0 --and pm.ID='176468'
+																															    ) sc
+																															    on bic.年月日=sc.Date and r.ID=sc.RoomID
+																															    left join T_AMS_Contracts c
+																															    on sc.ContractID=c.ID
+																															    left join dbo.V_AMS_StoresStructure vss
+																															    on r.ID=vss.房间编码
+																															    left join T_AMS_ChargeAccountTypes cat
+																															    on sc.FeeType=cat.FeeType and cat.ChargeType='4'
+																															    where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+																															    -------------------------------------------合同收入-门店费用-------------------------------------------------------------------------------
+																															    insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+																															    select   bic.年月日 as 日期,null as 合同编码,null as 租客编码,sc.StoreID as 门店号,null as 床号, 
+																															            case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+																																                 when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+																																		              when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+																																			                   when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+																																					           r.Status as 房间状态,'合同' as 类型,sc.FeeType as 科目编码,
+																																						           '门店费用' as 科目类型,cat.Name as 科目名称,sc.no as 数量,sc.dj as 单价,sc.Amount as 金额
+																																							   from BI_UTIL_CALENDAR bic
+																																							   left join T_AMS_Rooms r
+																																							   on 1=1
+																																							   left join (select CONVERT(varchar(10),pm.Date,120) as Date,sc.StoreID,sc.ContractID,sc.RoomID ,sc.FeeType,sc.no,case when sc.no=0 then 0 else sc.Amount/sc.no end as dj,sc.Amount,pm.ID
+																																							   from T_AMS_PaymentMethods pm
+																																							   left join (
+																																							   select StoreID,null as contractid,null as RoomID,Status,PaymentMethodID,Type as FeeType,1 as no,Amount from T_AMS_StoreCharges) sc
+																																							   on pm.ID=sc.PaymentMethodID 
+																																							   where sc.Status=1 and pm.Status=2 and pm.TotalAmount!=0 --and pm.ID='176468'
+																																							   ) sc
+																																							   on bic.年月日=sc.Date 
+																																							   --left join T_AMS_Contracts c
+																																							   --on sc.ContractID=c.ID
+																																							   --left join dbo.V_AMS_StoresStructure vss
+																																							   --on r.ID=vss.房间编码
+																																							   left join T_AMS_ChargeAccountTypes cat
+																																							   on sc.FeeType=cat.FeeType and cat.ChargeType='3'
+																																							   where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+																																							   -------------------------------------------折扣--------------------------------------------------------------------------------
+																																							   insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+																																							   select   bic.年月日 as 日期,sc.ContractID as 合同编码,sc.RenterID as 租客编码,vss.门店编码,vss.床号, 
+																																							           case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+																																								                when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+																																										             when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+																																											                  when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+																																													          r.Status as 房间状态,'折扣' as 类型,sc.ProductCode as 科目编码,
+																																														          sc.zklx as 科目类型,sc.Comment as 科目名称,sc.no as 数量,sc.Amount/sc.no as 单价,sc.Amount as 金额
+																																															  from BI_UTIL_CALENDAR bic
+																																															  left join T_AMS_Rooms r
+																																															  on 1=1
+																																															  inner join (select convert(varchar(10),isnull(pm.Date,pm.createdate),120) as date,s.ID as StoreID,a.ContractID,c.RenterID,r.ID as RoomID,b.ProductCode,
+																																															  case when cp.discounttype='1' then '直减'
+																																															       when cp.DiscountType='2' then '折扣'
+																																															            else '折扣到' end as zklx,cp.Comment
+																																																    ,b.quantity as no,b.UnitPrice as Amount
+																																																    from (select ID,ContractID,PaymentMethodID,ReceivableAmount from T_AMS_Charges) a 
+																																																    inner join (select ChargeID,quantity, UnitPrice,productcode from T_AMS_ChargeDetails where  ProductType='2')b
+																																																    on a.ID=b.ChargeID
+																																																    left join T_AMS_Contracts c
+																																																    on a.ContractID=c.ID
+																																																    left join T_AMS_Rooms r
+																																																    on c.RoomID=r.ID
+																																																    left join T_AMS_Stores s
+																																																    on r.StoreID=s.ID
+																																																    left join T_AMS_PaymentMethods pm
+																																																    on a.PaymentMethodID=pm.ID
+																																																    left join T_AMS_Coupons cp
+																																																    on b.ProductCode=cp.CouponNo
+																																																    ) sc
+																																																    on bic.年月日=sc.Date and r.ID=sc.RoomID
+																																																    left join dbo.V_AMS_StoresStructure vss
+																																																    on r.ID=vss.房间编码
+																																																    where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+																																																    -------------------------------------------折扣前--------------------------------------------------------------------------------
+																																																    insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+																																																    select   bic.年月日 as 日期,sc.ContractID as 合同编码,sc.RenterID as 租客编码,vss.门店编码,vss.床号, 
+																																																            case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+																																																	                 when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+																																																			              when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+																																																				                   when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+																																																						           r.Status as 房间状态,'折扣前' as 类型,sc.CouponNo as 科目编码,
+																																																							           sc.zklx as 科目类型,sc.Comment as 科目名称,sc.no as 数量,sc.Amount/sc.no as 单价,sc.Amount as 金额
+																																																								   from BI_UTIL_CALENDAR bic
+																																																								   left join T_AMS_Rooms r
+																																																								   on 1=1
+																																																								   inner join (select convert(varchar(10),isnull(pm.Date,pm.createdate),120) as date,r.StoreID as StoreID,pc.ContractID,c.RenterID,r.ID as RoomID,cp.CouponNo,
+																																																								          case when cp.discounttype='1' then '直减'
+																																																									              when cp.DiscountType='2' then '折扣'
+																																																										                  when cp.DiscountType='3' then '折扣到' else null end as zklx,cp.Comment,pcd.Quantity as no,
+																																																												         case when cp.discounttype='1' then (pcd.UnitPrice+cp.number)*pcd.Quantity 
+																																																													             when cp.discounttype='2' then (pcd.UnitPrice*100/cp.number)*pcd.Quantity else pc.Amount end  as Amount--,pc.Amount
+																																																														     from T_AMS_PeriodicCharges pc
+																																																														     left join T_AMS_PeriodicChargeDetails pcd
+																																																														     on pc.ID=pcd.PeriodicChargeID
+																																																														     left join T_AMS_Contracts c
+																																																														     on pc.ContractID=c.ID
+																																																														     left join T_AMS_ContractFees cf
+																																																														     on c.ID=cf.ContractID
+																																																														     left join T_AMS_Coupons cp
+																																																														     on cf.RentCouponID=cp.ID
+																																																														     left join T_AMS_Rooms r
+																																																														     on c.RoomID=r.ID
+																																																														     left join T_AMS_PaymentMethods pm
+																																																														     on pc.PaymentMethodID=pm.ID
+																																																														     --where cp.CouponNo is not null
+																																																														     ) sc
+																																																														     on bic.年月日=sc.Date and r.ID=sc.RoomID
+																																																														     left join dbo.V_AMS_StoresStructure vss
+																																																														     on r.ID=vss.房间编码
+																																																														     where bic.年月日=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+
+																																																														     -------------------------------------------支付--------------------------------------------------------------------------------
+																																																														     insert into [T_AMS_DailyRooms]([日期],[合同编码],[租客编码],[门店],[床位],[房间类型],[房间状态],[类型],[科目编码],[科目类型],[科目名称],[数量],[单价],[金额])
+																																																														     select   sc.Date as 日期,sc.ContractID as 合同编码,sc.RenterID as 租客编码,vss.门店编码,vss.床号, 
+																																																														             case when  r.ID in (select roomid from T_AMS_SpecialRooms where type='1') then '大合同' 
+																																																															                  when  r.ID in (select roomid from T_AMS_SpecialRooms where type='2') then '底商' 
+																																																																	               when  r.ID in (select roomid from T_AMS_SpecialRooms where type='3') then '员工宿舍' 
+																																																																		                    when  r.ID in (select roomid from T_AMS_SpecialRooms where type='4') then '测试房间'  else '公寓' end as 房间类型,
+																																																																				             r.Status as 房间状态,'支付' as 类型,sc.ID as 科目编码,
+																																																																					             sc.Name as 科目类型,sc.Name as 科目名称,null as 数量,null as 单价,sc.Amount as 金额
+																																																																						     from  (select Date,StoreID,ContractID,RenterID,RoomID,pt.id,pt.Name,PaymentMethodID,Amount
+																																																																						     from (select Date,StoreID,ContractID,RenterID,RoomID,Type, PaymentMethodID,Amount
+																																																																						     from (select convert(varchar(10),pm.Date,120) as Date,sc.StoreID,sc.ContractID,sc.RenterID,sc.RoomID,sc.PaymentMethodID,isnull(pd.Type,2) as Type,sum(sc.Amount) as Amount
+																																																																						     from t_ams_PaymentMethods pm
+																																																																						     left join (
+																																																																						               --门店收费
+																																																																							                 select StoreID,null as ContractID,null as RenterID,null as RoomID,Status,PaymentMethodID,Amount from  T_AMS_StoreCharges
+																																																																									           union all
+																																																																										             --周期性收费
+																																																																											               select r.StoreID,pc.ContractID,c.RenterID,r.ID as RoomID,pc.Status,pc.PaymentMethodID,pc.Amount from T_AMS_PeriodicCharges pc left join T_AMS_Contracts c on pc.ContractID=c.ID left join T_AMS_Rooms r on c.RoomID=r.ID
+																																																																												                 union all
+																																																																														           --预约收费
+																																																																															             select r.StoreID,rc.ContractID,rs.RenterID,rs.RoomID,rc.Status,rc.PaymentMethodID,rc.Amount from T_AMS_ReservationCharges rc left join T_AMS_Reservations rs on rc.ReservationID=rs.ID left join T_AMS_Rooms r on rs.RoomID=r.ID
+																																																																																               union all
+																																																																																	                 --一次性收费
+																																																																																			           select r.StoreID,cs.ContractID,c.RenterID,r.ID as RoomID,cs.Status,cs.PaymentMethodID,cs.Amount from t_ams_Charges cs left join T_AMS_Contracts c on cs.ContractID=c.ID left join T_AMS_Rooms r on c.RoomID=r.ID
+																																																																																				             ) sc
+																																																																																					     on pm.ID=sc.PaymentMethodID
+																																																																																					     left join T_AMS_PaymentDetails pd
+																																																																																					     on pm.ID=pd.PaymentMethodID
+																																																																																					     where sc.Status=1 and pm.Status=2 and pm.TotalAmount!=0 -- and pd.Type  is null
+																																																																																					     --and  convert(varchar(7),pm.Date,120)='2016-06' 
+																																																																																					     group by convert(varchar(10),pm.Date,120),sc.StoreID,sc.ContractID,sc.RenterID,sc.RoomID,sc.PaymentMethodID,pd.Type) a
+																																																																																					     ) a
+																																																																																					     left join T_AMS_PayMethodTypes pt
+																																																																																					     on a.Type=pt.ID
+																																																																																					     ) sc
+																																																																																					     left join T_AMS_Rooms r
+																																																																																					     on sc.RoomID=r.ID
+																																																																																					     left join dbo.V_AMS_StoresStructure vss
+																																																																																					     on sc.RoomID=vss.房间编码
+																																																																																					     where sc.Date=Convert(varchar(10),DATEADD(DAY,-1,GetDate()),120)-- and sc.ID='176468'
+
+																																																																																					     END
